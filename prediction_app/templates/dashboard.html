@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Load Prediction Dashboard</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .prediction-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input, select, button {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .result-box {
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .prediction-value {
+            font-size: 3em;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .metric-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .feedback-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #e0e0e0;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+            
+            .metrics {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚡ Load Prediction System</h1>
+            <p>Real-time power load forecasting with continuous learning</p>
+        </div>
+        
+        <div class="grid-2">
+            <!-- Prediction Card -->
+            <div class="card prediction-card">
+                <h2>🔮 Predict Load</h2>
+                <div class="input-group">
+                    <label>Date & Time</label>
+                    <input type="datetime-local" id="datetime" step="3600">
+                </div>
+                <button onclick="predictSingle()">Predict Load</button>
+                
+                <div id="predictionResult" class="result-box" style="display: none;">
+                    <div class="prediction-value" id="loadValue">0 MW</div>
+                    <div style="margin-top: 10px;">
+                        <div>🌡️ Temperature: <span id="temp">-</span>°C</div>
+                        <div>🌧️ Rainfall: <span id="rainfall">-</span> mm</div>
+                        <div>💨 Wind Speed: <span id="wind">-</span> m/s</div>
+                    </div>
+                    <div class="feedback-section">
+                        <label>Actual Load (for feedback)</label>
+                        <input type="number" id="actualLoad" placeholder="Enter actual load value">
+                        <button onclick="submitFeedback()" style="background: #28a745;">Submit Feedback</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Sequential Prediction Card -->
+            <div class="card">
+                <h2>📈 Sequential Prediction (Next 24 Hours)</h2>
+                <div class="input-group">
+                    <label>Start Date & Time</label>
+                    <input type="datetime-local" id="startDatetime" step="3600">
+                </div>
+                <button onclick="predictSequential()">Predict Next 24 Hours</button>
+                <div id="sequentialResult"></div>
+            </div>
+        </div>
+        
+        <!-- Visualization Card -->
+        <div class="card">
+            <h2>📊 Historical & Predicted Load</h2>
+            <div id="chart" style="height: 400px;"></div>
+        </div>
+        
+        <!-- Performance Metrics Card -->
+        <div class="card">
+            <h2>📈 Model Performance</h2>
+            <div class="metrics" id="metrics">
+                <div class="metric-card">
+                    <div>MAE</div>
+                    <div class="metric-value" id="mae">-</div>
+                </div>
+                <div class="metric-card">
+                    <div>MSE</div>
+                    <div class="metric-value" id="mse">-</div>
+                </div>
+                <div class="metric-card">
+                    <div>R² Score</div>
+                    <div class="metric-value" id="r2">-</div>
+                </div>
+                <div class="metric-card">
+                    <div>Samples</div>
+                    <div class="metric-value" id="samples">-</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing...</p>
+        </div>
+    </div>
+    
+    <script>
+        let currentPrediction = null;
+        
+        function showLoading() {
+            $('#loading').show();
+        }
+        
+        function hideLoading() {
+            $('#loading').hide();
+        }
+        
+        function predictSingle() {
+            const datetime = $('#datetime').val();
+            if (!datetime) {
+                alert('Please select date and time');
+                return;
+            }
+            
+            showLoading();
+            $.ajax({
+                url: '/api/predict/',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    datetime: datetime.replace('T', ' ') + ':00'
+                }),
+                success: function(response) {
+                    if (response.success) {
+                        currentPrediction = response.prediction;
+                        $('#predictionResult').show();
+                        $('#loadValue').text(response.prediction.predicted_load + ' MW');
+                        $('#temp').text(response.prediction.weather_used.temperature);
+                        $('#rainfall').text(response.prediction.weather_used.rainfall);
+                        $('#wind').text(response.prediction.weather_used.wind_speed);
+                    } else {
+                        alert('Error: ' + response.error);
+                    }
+                    hideLoading();
+                },
+                error: function() {
+                    alert('Error making prediction');
+                    hideLoading();
+                }
+            });
+        }
+        
+        function predictSequential() {
+            const startDatetime = $('#startDatetime').val();
+            if (!startDatetime) {
+                alert('Please select start date and time');
+                return;
+            }
+            
+            showLoading();
+            $.ajax({
+                url: '/api/predict/sequential/',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    start_datetime: startDatetime.replace('T', ' ') + ':00',
+                    hours: 24
+                }),
+                success: function(response) {
+                    if (response.success) {
+                        let html = '<div style="margin-top: 15px; max-height: 300px; overflow-y: auto;">';
+                        response.predictions.forEach(pred => {
+                            html += `<div style="padding: 8px; border-bottom: 1px solid #e0e0e0;">
+                                ${new Date(pred.datetime).toLocaleString()}: <strong>${pred.predicted_load} MW</strong>
+                            </div>`;
+                        });
+                        html += '</div>';
+                        $('#sequentialResult').html(html);
+                        loadHistoricalData(); // Refresh chart
+                    } else {
+                        alert('Error: ' + response.error);
+                    }
+                    hideLoading();
+                },
+                error: function() {
+                    alert('Error making sequential predictions');
+                    hideLoading();
+                }
+            });
+        }
+        
+        function submitFeedback() {
+            if (!currentPrediction) {
+                alert('No prediction to provide feedback for');
+                return;
+            }
+            
+            const actualLoad = $('#actualLoad').val();
+            if (!actualLoad) {
+                alert('Please enter actual load');
+                return;
+            }
+            
+            showLoading();
+            $.ajax({
+                url: '/api/feedback/',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    datetime: currentPrediction.datetime,
+                    actual_load: parseFloat(actualLoad)
+                }),
+                success: function(response) {
+                    if (response.success) {
+                        alert('✅ Feedback submitted! Model will learn from this.');
+                        $('#actualLoad').val('');
+                        loadHistoricalData();
+                        loadPerformanceMetrics();
+                    } else {
+                        alert('Error: ' + response.error);
+                    }
+                    hideLoading();
+                },
+                error: function() {
+                    alert('Error submitting feedback');
+                    hideLoading();
+                }
+            });
+        }
+        
+        function loadHistoricalData() {
+            $.ajax({
+                url: '/api/historical/?days=7',
+                method: 'GET',
+                success: function(response) {
+                    if (response.success && response.data.length > 0) {
+                        const dates = response.data.map(d => new Date(d.date));
+                        const actualLoads = response.data.map(d => d.actual_load);
+                        const predictedLoads = response.data.map(d => d.predicted_load);
+                        
+                        const trace1 = {
+                            x: dates,
+                            y: actualLoads,
+                            type: 'scatter',
+                            mode: 'lines+markers',
+                            name: 'Actual Load',
+                            line: { color: '#28a745', width: 2 }
+                        };
+                        
+                        const trace2 = {
+                            x: dates,
+                            y: predictedLoads,
+                            type: 'scatter',
+                            mode: 'lines+markers',
+                            name: 'Predicted Load',
+                            line: { color: '#dc3545', width: 2, dash: 'dash' }
+                        };
+                        
+                        const layout = {
+                            title: 'Load Comparison (Last 7 Days)',
+                            xaxis: { title: 'Date & Time' },
+                            yaxis: { title: 'Load (MW)' },
+                            hovermode: 'closest'
+                        };
+                        
+                        Plotly.newPlot('chart', [trace1, trace2], layout);
+                    }
+                }
+            });
+        }
+        
+        function loadPerformanceMetrics() {
+            $.ajax({
+                url: '/api/performance/',
+                method: 'GET',
+                success: function(response) {
+                    if (response.success && response.performance.length > 0) {
+                        const latest = response.performance[0];
+                        $('#mae').text(latest.mae.toFixed(2));
+                        $('#mse').text(latest.mse.toFixed(2));
+                        $('#r2').text(latest.r2.toFixed(4));
+                        $('#samples').text(latest.samples);
+                    }
+                }
+            });
+        }
+        
+        // Load data on page load
+        $(document).ready(function() {
+            loadHistoricalData();
+            loadPerformanceMetrics();
+            
+            // Set default datetime to next hour
+            const now = new Date();
+            now.setHours(now.getHours() + 1, 0, 0, 0);
+            const formattedDate = now.toISOString().slice(0, 16);
+            $('#datetime').val(formattedDate);
+            $('#startDatetime').val(formattedDate);
+        });
+        
+        // Refresh every 5 minutes
+        setInterval(function() {
+            loadHistoricalData();
+            loadPerformanceMetrics();
+        }, 300000);
+    </script>
+</body>
+</html>
