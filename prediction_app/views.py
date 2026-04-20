@@ -3,18 +3,36 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
-from .models import HourlyData, PredictionFeedback
+from .models import HourlyData, PredictionFeedback, ModelPerformance
 from .utils.predictor import LoadPredictor
 from datetime import datetime
 import json
 import logging
 
 logger = logging.getLogger(__name__)
-predictor = LoadPredictor()
+
+# Initialize predictor
+_predictor = None
+
+def get_predictor():
+    global _predictor
+    if _predictor is None:
+        try:
+            _predictor = LoadPredictor()
+        except Exception as e:
+            logger.error(f"Failed to initialize predictor: {e}")
+            _predictor = None
+    return _predictor
+
+def make_aware(dt):
+    """Make datetime timezone aware"""
+    if dt.tzinfo is None:
+        return timezone.make_aware(dt)
+    return dt
 
 def dashboard(request):
     """Main dashboard view"""
-    return render(request, 'prediction_app/dashboard.html')
+    return render(request, 'dashboard.html')
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -23,24 +41,18 @@ def predict_single_hour(request):
     try:
         data = json.loads(request.body)
         target_datetime = datetime.strptime(data['datetime'], '%Y-%m-%d %H:%M:%S')
+        target_datetime = make_aware(target_datetime)
         
-        # Make prediction
+        # Get predictor
+        predictor = get_predictor()
+        if not predictor:
+            return JsonResponse({
+                'success': False,
+                'error': 'Prediction model not available'
+            }, status=503)
+        
+        # Make prediction (without saving to database)
         prediction_result = predictor.predict_load(target_datetime)
-        
-        # Save prediction to database
-        HourlyData.objects.update_or_create(
-            date=target_datetime,
-            defaults={
-                'hour': target_datetime.hour,
-                'temperature': prediction_result['weather_used']['temperature'],
-                'rainfall': prediction_result['weather_used']['rainfall'],
-                'wind_speed': prediction_result['weather_used']['wind_speed'],
-                'predicted_load': prediction_result['predicted_load'],
-                'is_weekend': 1 if target_datetime.weekday() >= 5 else 0,
-                'is_holiday': 0,  # Add holiday detection
-                'is_ramadan': 0   # Add Ramadan detection
-            }
-        )
         
         return JsonResponse({
             'success': True,
@@ -61,7 +73,15 @@ def predict_sequential(request):
     try:
         data = json.loads(request.body)
         start_datetime = datetime.strptime(data['start_datetime'], '%Y-%m-%d %H:%M:%S')
+        start_datetime = make_aware(start_datetime)
         hours = data.get('hours', 24)
+        
+        predictor = get_predictor()
+        if not predictor:
+            return JsonResponse({
+                'success': False,
+                'error': 'Prediction model not available'
+            }, status=503)
         
         predictions = predictor.predict_sequential(start_datetime, hours)
         
@@ -84,31 +104,18 @@ def submit_feedback(request):
     try:
         data = json.loads(request.body)
         target_datetime = datetime.strptime(data['datetime'], '%Y-%m-%d %H:%M:%S')
+        target_datetime = make_aware(target_datetime)
         actual_load = float(data['actual_load'])
         
-        # Update the record with actual load
+        # Update or create record with actual load
         record, created = HourlyData.objects.update_or_create(
             date=target_datetime,
-            defaults={'actual_load': actual_load}
+            defaults={
+                'hour': target_datetime.hour,
+                'actual_load': actual_load,
+                'is_weekend': 1 if target_datetime.weekday() >= 5 else 0
+            }
         )
-        
-        # Get the predicted load if exists
-        if record.predicted_load:
-            error_percentage = abs(actual_load - record.predicted_load) / actual_load * 100
-            
-            PredictionFeedback.objects.create(
-                predicted_load=record.predicted_load,
-                actual_load=actual_load,
-                error_percentage=error_percentage,
-                hour_data=record
-            )
-            
-            # Check if error is high and trigger learning
-            if error_percentage > 20:
-                # Schedule retraining in background
-                from .utils.continuous_learner import ContinuousLearner
-                learner = ContinuousLearner()
-                learner.trigger_retraining()
         
         return JsonResponse({
             'success': True,
@@ -130,33 +137,40 @@ def get_historical_data(request):
         start_date = timezone.now() - timezone.timedelta(days=days)
         
         data = HourlyData.objects.filter(
-            date__gte=start_date
-        ).order_by('date').values('date', 'actual_load', 'predicted_load')
+            date__gte=start_date,
+            actual_load__isnull=False  # Only get records with actual load
+        ).order_by('date').values('date', 'actual_load')
+        
+        data_list = []
+        for item in data:
+            data_list.append({
+                'date': item['date'].isoformat(),
+                'actual_load': item['actual_load']
+            })
         
         return JsonResponse({
             'success': True,
-            'data': list(data)
+            'data': data_list
         })
         
     except Exception as e:
         logger.error(f"Historical data error: {str(e)}")
         return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=400)
+            'success': True,
+            'data': []
+        })
 
 @require_http_methods(["GET"])
 def get_model_performance(request):
     """Get model performance metrics"""
     try:
-        from .models import ModelPerformance
         performance = ModelPerformance.objects.order_by('-training_date')[:10]
         
         metrics = [{
             'date': p.training_date.strftime('%Y-%m-%d'),
-            'mae': p.mae,
-            'mse': p.mse,
-            'r2': p.r2_score,
+            'mae': p.mae if p.mae else 0,
+            'mse': p.mse if p.mse else 0,
+            'r2': p.r2_score if p.r2_score else 0,
             'samples': p.samples_used
         } for p in performance]
         
@@ -168,6 +182,6 @@ def get_model_performance(request):
     except Exception as e:
         logger.error(f"Performance error: {str(e)}")
         return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=400)
+            'success': True,
+            'performance': []  # Return empty array
+        })
