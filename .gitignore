@@ -1,0 +1,87 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# Django stuff
+*.log
+*.pot
+*.pyc
+db.sqlite3
+db.sqlite3-journal
+
+# Media & Static (optional - depends on your setup)
+media/
+staticfiles/
+
+# Environment variables
+.env
+.env.*
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# Mac
+.DS_Store
+
+# Linux
+*.swp
+
+# Windows
+Thumbs.db
+
+# Migrations (optional - be careful in production)
+**/migrations/*.py
+!**/migrations/__init__.py
+
+# Coverage / Testing
+.coverage
+htmlcov/
+.tox/
+.pytest_cache/
+
+# Build files
+build/
+dist/
+*.egg-info/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+
+# Jupyter Notebook (if using ML)
+.ipynb_checkpoints
+
+# Secrets
+secrets.json
+
+# Docker
+*.env
+docker-compose.override.yml
+
+
+# ML Models
+*.pkl
+*.joblib
+*.h5
+
+# Data files
+data/
+datasets/
