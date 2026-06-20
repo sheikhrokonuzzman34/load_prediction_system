@@ -1,0 +1,11 @@
+{
+  "model": "XGBoost Regressor",
+  "trained_at": "2026-06-21T00:27:20",
+  "mae": 5.7236,
+  "mse": 46.9639,
+  "rmse": 6.853,
+  "mape": 5.3326,
+  "r2_score": 0.974121,
+  "samples_used": 52597,
+  "test_samples": 10520
+}
