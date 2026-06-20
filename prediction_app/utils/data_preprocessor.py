@@ -9,7 +9,7 @@ class DataPreprocessor:
         self.scaler = MinMaxScaler()
         self.feature_columns = None
         
-    def load_and_prepare_data(self, csv_path='data/your_original_data.csv'):
+    def load_and_prepare_data(self, csv_path='data/load_data.csv'):
         """Load CSV and prepare for training"""
         df = pd.read_csv(csv_path)
         
