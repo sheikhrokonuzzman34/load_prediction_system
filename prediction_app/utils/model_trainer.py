@@ -74,7 +74,7 @@ class ModelTrainer:
         
         return model, history
     
-    def train_xgboost_model(self, csv_path='data/your_original_data.csv'):
+    def train_xgboost_model(self, csv_path='data/load_data.csv'):
         print("Loading and preparing data for XGBoost...")
         self.preprocessor.load_and_prepare_data(csv_path)
         X, y, feature_cols = self.preprocessor.prepare_features_for_xgboost()
